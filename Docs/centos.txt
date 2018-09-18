@@ -1155,6 +1155,10 @@ $ sudo puttygen xxxx.ppk -O private-openssh -o xxxx.pem
 
 
 ------tarball编译 GnuPG (GPG)------
+mac
+$ brew install gpg
+然后到参考后面的 Inappropriate ioctl for device 配置环境变量。
+
 https://www.gnupg.org/download/
 linux (tarball) 
 $ mkdir ~/gnupg

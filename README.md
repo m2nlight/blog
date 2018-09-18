@@ -13,7 +13,3 @@
 5. [配置App.config、App.Debug.config和App.Release.config](Docs/配置App.config、App.Debug.config和App.Release.config.md)
 6. [WebService 发布到 IIS](Docs/WebService%20发布到%20IIS.md)
 7. [CSharp 缓存](Docs/CSharp%20缓存.md)
-
-## 常用
-
-* [Redis Servers](Docs/Redis%20Servers.md)
