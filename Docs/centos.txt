@@ -1,0 +1,1946 @@
+最小安装：
+1. 选择English
+2. DATE & TIME 修改好本地时间
+   SOFTWARE SELECTION默认的Minimal Install就好
+   INSTALLATION DESTINATION选一下
+   然后，Begin Installation
+3. ROOT PASSWORD设置ROOT密码
+   USER CREATION设置新用户，勾选Make this user administrator
+   等待安装完成，点Reboot按钮。
+
+配置静态IPv4：
+$ systemctl status NetworkManager.service
+检查网络管理器服务状态
+
+注1：建议使用nmtui的终端用户界面代替下面到92行左右的网络配置内容。
+注2：Ubuntu 18.04 Server 使用了netplan进行网络管理，包括nameservers配置，请搜索下面的“netplan配置”。
+
+$ nmcli dev status
+DEVICE  TYPE      STATE         CONNECTION
+ens33   ethernet  disconnected  --
+lo      loopback  unmanaged     --
+这里需要配置ens33
+
+$ su
+# cd /etc/sysconfig/network-scripts
+# ls ifcfg*
+# vi ifcfg-ens33
+配置的ens33
+
+将 BOOTPROTO=dhcp 改为 BOOTPROTO=static
+然后在下行添加：
+IPADDR=192.168.48.10
+NETMASK=225.225.225.0
+NM_CONTROLLED=no    （NM_CONTROLLED=no表示该接口通过该配置文件设置，而不是通过网络管理器）
+将 ONBOOT=no 改为 ONBOOT=yes
+（如果虚拟机NAT访问，加入网关设置
+	GATEWAY=192.168.48.2
+	NETWORK=192.168.48.0
+	其他配置：	
+	DHCP_HOSTNAME=192.168.48.254
+	BROADCAST=192.168.48.255
+	HWADDR=00:0C:29:56:BF:F7
+）
+保存退出vi
+
+注：如果使用dhcp动态IP
+只要将 ONBOOT=no 改为 ONBOOT=yes 即可。
+
+# systemctl restart network.service
+# ip add
+查看ip信息
+
+[ freeBSD
+  # ifconfig           // 查看可用的网卡名称，例子里看到了hn0 是以太网
+  # vi /etc/rc.conf    // 编辑配置文件，配置静态IP、路由IP并启用ssh
+  hostname="freebsd"
+  #ifconfig_DEFAULT="DHCP inet6 accept_rtadv"
+  ifconfig_hn0="inet 192.168.0.60 netmask 255.255.255.0"
+  defaultrouter="192.168.0.1"
+  
+  sshd_enable="YES"
+  # vi /etc/resolv.conf  // 配置DNS
+  nameserver 8.8.8.8
+  nameserver 8.8.4.4
+  # /etc/rc.d/netif restart  // 重启网络
+  # adduser              // 添加一个用户，用于ssh连接
+]
+
+DNS配置
+NMCLI方法：
+# nmcli connection show
+# nmcli con mod ens33 ipv4.dns "8.8.8.8 8.8.4.4"
+# nmcli con up ens33
+# ping www.baidu.com -c 4
+手动修改方法：
+# vim /etc/resolv.conf
+nameserver 8.8.8.8
+nameserver 8.8.4.4
+# vim /etc/NetworkManager/NetworkManager.conf
+在[main]下加入：
+dns=none
+# systemctl restart NetworkManager
+# ping www.baidu.com -c 4
+
+Debian配置网络
+# vi /etc/network/interfaces
+DHCP配置：
+    auto eth0
+    allow-hotplug eth0
+    iface eth0 inet dhcp
+    （IPv6追加:）
+    iface eth0 inet6 dhcp
+    （或者）
+    iface eth0 inet6 auto
+静态IP配置：
+    auto eth0
+    iface eth0 inet static
+        address 192.0.2.7
+        netmask 255.255.255.0
+        gateway 192.0.2.254
+    （IPv6追加:）
+    iface eth0 inet6 static
+        address 2001:db8::c0ca:1eaf
+        netmask 64
+        gateway 2001:db8::1ead:ed:beef
+帮助：man interfaces
+# systemctl restart networking
+
+
+------------------------------------------
+netplan配置（Ubuntu 18.04 Server）
+$ netplan --help
+$ sudo vi /etc/netplan/50-cloud-init.yaml  (yaml文件名不固定，内容如下)
+
+# This file is generated from information provided by
+# the datasource.  Changes to it will not persist across an instance.
+# To disable cloud-init's network configuration capabilities, write a file
+# /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg with the following:
+# network: {config: disabled}
+network:
+    ethernets:
+        eth0:
+            addresses:
+            - 192.168.0.50/24
+            gateway4: 192.168.0.1
+            nameservers:
+                addresses: [8.8.8.8,8.8.4.4]
+                search: []
+            optional: true
+    version: 2
+
+应用设置：
+$ sudo netplan apply
+其他见：https://netplan.io/examples
+------------------------------------------
+
+
+配置光盘为安装源(注：后面有配置iso为安装源的，这里仅光盘镜像临时作为安装源使用)：
+$ sudo ssh 192.168.48.10 -l root
+# cat /etc/yum.repos.d/CentOS-Media.repo
+基本内容如下：
+[c7-media]
+name=CentOS-$releasever - Media
+baseurl=file:///media/CentOS/
+        file:///media/cdrom/
+        file:///media/cdrecorder/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+文件头的注释部分提示可以用命令
+yum --enablerepo=c7-media [command]
+或者
+yum --disablerepo=\* --enablerepo=c7-media [command]
+安装软件。
+
+# ls /dev/cdrom
+# mkdir /media/cdrom
+# mount /dev/cdrom /media/cdrom
+挂载cdrom
+
+[freeBSD
+先载入光盘
+    或者挂载到/dist目录：
+    # mkdir -p /dist
+    # mount -t iso9660 /dev/cd0 /dist
+用bsdconfig命令
+# bsdconfig
+选择 3.Packages
+选择 1.CD/DVD
+选择 FREEBSD_INSTALL ISO9660 file system
+在其中选择要安装的软件
+]
+
+
+安装vim、gcc、g++：
+# yum --disablerepo=\* --enablerepo=c7-media install vim -y
+# yum --disablerepo=\* --enablerepo=c7-media install gcc gcc-c++ -y
+
+
+----------------
+安装mysql 5.6：
+----------------
+先将client和server两个rpm安装包复制到本机下载目录，然后在mac终端输入：
+$ sudo scp ~/Downloads/MySQL-*.rpm bob@192.168.48.10:/home/bob/
+复制client和server安装文件到/home/bob/目录下（注：也可以复制到其他目录，比如root@192.168.48.10:/usr/local/）
+回到ssh：
+# rpm -qa|grep -i mariadb
+查询mariadb，与mysql冲突，下面将查到的库一并强制删除（最小安装只有mariadb-libs）
+# rpm -e --nodeps mariadb-libs
+# groupadd -r mysql
+# useradd -g mysql mysql -d /home/mysql -s /sbin/nologin
+（注：mysql 5.7论坛版安装顺序是：common、libs、client、server）
+（注2：mariadb 10.2需要一些依赖：yum --disablerepo=\* --enablerepo=c7-media install lsof perl rsync boost perl-DBI -y
+   然后安装顺序是：galera、MariaDB-10.2.10-centos73-x86_64-*（放在同一目录下：compat、common、client、server）
+ ）
+# yum --disablerepo=\* --enablerepo=c7-media install perl -y
+# rpm -ivh ./MySQL-client-5.6.34-1.el7.x86_64.rpm
+# yum --disablerepo=\* --enablerepo=c7-media install autoconf -y
+# rpm -ivh ./MySQL-server-5.6.34-1.el7.x86_64.rpm
+# rm -f MySQL-*.rpm
+# systemctl start mysql.service
+（注：mysql 5.7的启动服务是mysqld.service）
+（注2：mariadb 10.2启动服务是mysqld.service，mariadb也可以）
+# cat /root/.mysql_secret 
+The random password set for the root user at Tue Feb 21 13:55:26 2017 (local time): vZQwDJLbxm_zHno_
+（注：mysql 5.7的初始密码在log文件里
+    $ grep "temporary password" /var/log/mysqld.log
+    然后在调用mysql_secure_installation前，手动修改安全策略：
+    $ mysql -uroot -p
+    mysql> set global validate_password_policy=0;
+    mysql> set global validate_password_length=0;
+    mysql> exit
+    或者编辑 /etc/my.cnf
+    [mysqld]
+    validate_password=off
+）
+（注2：mariadb 10.2没有初始密码，可以通过下面命令将密码设置为123456
+    /usr/bin/mysqladmin -u root password '123456'
+）
+# /usr/bin/mysql_secure_installation
+把随机密码粘贴到提示符，根据提示，改变root密码，移除匿名账户，禁用root远程登录，移除测试数据库，刷新权限。
+（注：mysql 5.7在设置了前面的密码策略后，可能要多次输入简单的密码来确认）
+# mysql -uroot -p
+创建新用户：
+mysql> create user 'bob'@'%' identified by '123456';
+(如果用root账户远程连接：mysql> grant all privileges on *.* to 'root'@'%' identified by '123456';)
+mysql> flush privileges;
+mysql> exit
+# firewall-cmd --zone=public --add-port=3306/tcp --permanent
+# firewall-cmd --reload
+------ mysql emoji ------
+注意：utf8mb4的最低mysql版本支持版本为5.5.3+
+注意2：utf8mb4作为索引列需要注意，在MySQL 5.7.7和MariaDB 10.2.2中支持3072个字节最大索引，而MySQL5.6仅支持767个字节，
+所以在mysql5.6时，utf8mb4列的长度不要超过191（191*4<767），utf8可以是255（255*3<767）。如要使用超过767个字节（升级到3072个），需要设置
+SET GLOBAL innodb_file_per_table = ON,
+           innodb_file_format = Barracuda,
+           innodb_large_prefix = ON;
+并且在建立表（包括ALTER）的时候，加上 ROW_FORMAT=DYNAMIC 或者 ROW_FORMAT=COMPRESSED
+CREATE TABLE _tablename_(
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `hashtag` VARCHAR(255) NOT NULL COMMENT 'hashtag must be unique. Must be saved without #',
+    PRIMARY KEY (`id`),
+    UNIQUE INDEX `hashtags_hashtag` (`hashtag` ASC))
+)
+ENGINE = InnoDB
+DEFAULT CHARACTER SET utf8mb4
+ROW_FORMAT = COMPRESSED;
+ALTER就是：
+ALTER TABLE _tablename_ ROW_FORMAT=DYNAMIC;
+（mysql 5.7.9是默认innodb_default_row_format=DYNAMIC，innodb_file_per_table = ON，innodb_file_format = Barracuda，innodb_large_prefix = ON）
+---
+如果创建数据库、表、列时指定utf8mb4和utf8mb4_general_ci，下面应该可以不用设置。
+1) 设置my.cnf
+$ sudo vim /etc/my.cnf（ubuntu的位置 /etc/mysql/my.cnf）
+[client]
+default-character-set=utf8mb4
+
+[mysql]
+default-character-set=utf8mb4
+
+
+[mysqld]
+default_authentication_plugin=mysql_native_password     // mysql 8 默认 caching_sha2_password，这里更改为原始的
+character-set-client-handshake=FALSE
+character-set-server=utf8mb4
+collation-server=utf8mb4_unicode_ci
+init_connect='SET NAMES utf8mb4'
+
+skip-name-resolve
+保存后重启mysql
+$ systemctl restart mysql
+$ mysql -uroot -p
+mysql> SHOW VARIABLES WHERE Variable_name LIKE 'character_set_%' OR Variable_name LIKE 'collation%';
++--------------------------+----------------------------+
+| Variable_name            | Value                      |
++--------------------------+----------------------------+
+| character_set_client     | utf8mb4                    |
+| character_set_connection | utf8mb4                    |
+| character_set_database   | utf8mb4                    |
+| character_set_filesystem | binary                     |
+| character_set_results    | utf8mb4                    |
+| character_set_server     | utf8mb4                    |
+| character_set_system     | utf8                       |
+| character_sets_dir       | /usr/share/mysql/charsets/ |
+| collation_connection     | utf8mb4_general_ci         |
+| collation_database       | utf8mb4_unicode_ci         |
+| collation_server         | utf8mb4_unicode_ci         |
++--------------------------+----------------------------+
+11 rows in set
+
+注：collation_connection、collation_database、collation_server是utf8mb4_general_ci没有关系。
+
+2) 修改Database、Table、Column字符集：
+ALTER DATABASE database_name CHARACTER SET = utf8mb4 COLLATE = utf8mb4_unicode_ci;
+ALTER TABLE table_name CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+ALTER TABLE table_name CHANGE column_name VARCHAR(191) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+修复优化表
+REPAIR TABLE table_name;
+OPTIMIZE TABLE table_name;
+也可以用mysqlcheck命令优化所有数据库
+$ mysqlcheck -uroot -p --auto-repair --optimize --all-databases
+
+3) 对于Java来说mysql connector版本需高于5.1.13。
+
+------------
+安装gogs：
+------------
+先将linux_amd64.zip包复制到本机下载目录，然后在mac终端输入：
+$ sudo scp ~/Downloads/linux_amd64.tar.gz root@192.168.48.10:/root/
+复制linux_amd64.tar.gz文件到/root/目录下（注：也可以复制到其他目录，比如root@192.168.48.10:/usr/local/）
+回到ssh：
+# groupadd -r git
+# useradd -g git git -d /home/git
+# mv /root/linux_amd64.tar.gz /home/git/
+# chown git:git /home/git/linux_amd64.tar.gz
+（如果是zip文件：yum --disablerepo=\* --enablerepo=c7-media install unzip -y）
+# su git
+$ cd ~
+$ tar xvfz linux_amd64.tar.gz
+（如果是zip文件：unzip linux_amd64.zip）
+$ ls
+gogs  linux_amd64.tar.gz
+$ rm -f linux_amd64.tar.gz
+$ cd gogs
+$ chmod +x ./gogs
+$ cat ./scripts/mysql.sql
+DROP DATABASE IF EXISTS gogs;
+CREATE DATABASE IF NOT EXISTS gogs CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;
+$ mysql -uroot -p < scripts/mysql.sql
+$ mysql -uroot -p
+mysql> grant all privileges on gogs.* to 'bob'@'%' identified by '123456';
+mysql> flush privileges;
+mysql> exit
+$ exit
+# cp /home/git/gogs/scripts/systemd/gogs.service /etc/systemd/system/
+# cat /etc/systemd/system/gogs.service
+[Unit]
+Description=Gogs
+After=syslog.target
+After=network.target
+After=mariadb.service mysqld.service postgresql.service memcached.service redis.service
+
+[Service]
+# Modify these two values and uncomment them if you have
+# repos with lots of files and get an HTTP error 500 because
+# of that
+###
+#LimitMEMLOCK=infinity
+#LimitNOFILE=65535
+Type=simple
+User=git
+Group=git
+WorkingDirectory=/home/git/gogs
+ExecStart=/home/git/gogs/gogs web
+Restart=always
+Environment=USER=git HOME=/home/git
+
+[Install]
+WantedBy=multi-user.target
+
+启动服务，配置防火墙
+# systemctl start gogs.service
+# systemctl enable gogs.service
+# firewall-cmd --zone=public --add-port=3000/tcp --permanent
+# firewall-cmd --reload
+（ubuntu系统配置防火墙命令：
+  sudo ufw allow 3000
+  sudo ufw enable）
+ (iptables:
+ // 添加
+ iptables -A INPUT -p tcp --dport 22 -j ACCEPT
+ iptables -A OUTPUT -p tcp --sport 22 -j ACCEPT
+ // 保存
+ service iptables save
+ cat /etc/sysconfig/iptables
+ // 重启iptables
+ service iptables restart
+ iptables -nvL --line-number
+ // 删除
+ iptables -D INPUT 2 <--- line number
+ // 修改
+ iptables -R INPUT 3 -j ACCEPT
+)
+
+然后在浏览器打开
+http://192.168.48.10:3000
+（注2：mariadb配置好后，主机也许不能用127.0.0.1连接，请用主机ip：192.168.48.10）
+
+注：如果开启了selinux，可能需要关闭。
+# setenforce 0
+# vim /etc/sysconfig/selinux
+将SELINUX=enforce改为disabled
+配置文件为了保证重启后生效。
+
+
+无法使用ssh进行clone和push数据
+如果http方式没问题，就是应为gogs的账户（这里是git账户）没有指定shell，
+解决办法是：
+# cat /etc/shells
+/bin/sh
+/bin/bash
+...
+# usermod -s /bin/bash git
+
+
+升级gogs
+$ sudo service gogs stop
+$ sudo su - git
+$ cd ~
+$ pwd
+/home/git
+$ ls
+gogs gogs-repositories
+$ mv gogs gogs_old
+
+$ wget https://dl.gogs.io/gogs_v$VERSION_$OS_$ARCH.tar.gz
+$ tar -zxvf gogs_v$VERSION_$OS_$ARCH.tar.gz
+$ ls
+gogs gogs_old gogs-repositories gogs_v$VERSION_$OS_$ARCH.tar.gz
+
+$ cp -R gogs_old/custom gogs
+$ cp -R gogs_old/data gogs
+$ cp -R gogs_old/log gogs
+
+$ sudo service gogs start
+
+如果启动失败，可能是权限的问题：
+# chmod +x /home/git/gogs/gogs
+# chown -R git:git /home/git/gogs
+# service gogs start
+
+
+---------
+docker-ce
+---------
+方式一：在线安装
+https://docs.docker.com/engine/installation/linux/docker-ce/centos/#os-requirements
+1. 卸载
+# sudo yum remove docker \
+                  docker-client \
+                  docker-client-latest \
+                  docker-common \
+                  docker-latest \
+                  docker-latest-logrotate \
+                  docker-logrotate \
+                  docker-selinux \
+                  docker-engine-selinux \
+                  docker-engine
+2. 安装yum配置管理器
+# yum install -y yum-utils device-mapper-persistent-data lvm2
+3. 加入docker-ce repo
+# yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+或者 wget -O /etc/yum.repos.d/docker-ce.repo https://download.docker.com/linux/centos/docker-ce.repo
+（如果采用清华大学镜像，接着执行：
+# sed -i 's+download.docker.com+mirrors.tuna.tsinghua.edu.cn/docker-ce+' /etc/yum.repos.d/docker-ce.repo
+）
+（可选）然后可以通过命令切换edge或者test
+# yum-config-manager --enable docker-ce-edge
+# yum-config-manager --enable docker-ce-test
+禁用则返回标准
+# yum-config-manager --disable docker-ce-edge
+4. 安装docker-ce
+# yum makecache fast （可选）
+# sudo yum install docker-ce
+（查看安装docker的其他版本版本
+  $ yum list docker-ce --showduplicates | sort -r
+  # yum install <FULLY-QUALIFIED-PACKAGE-NAME>）
+5. 启动docker
+# systemctl start docker
+# systemctl enable docker
+6. 测试
+# docker run hello-world
+方式二：rpm包
+rpm方式的话，需要下载安装的文件：
+安装依赖
+# yum --disablerepo=\* --enablerepo=c7-media install libcgroup policycoreutils-python -y
+container-selinux
+http://mirror.centos.org/centos/7.4.1708/extras/x86_64/Packages/container-selinux-2.28-1.git85ce147.el7.noarch.rpm
+# rpm -ivh /root/container-selinux-2.28-1.git85ce147.el7.noarch.rpm
+安装docker-ce
+https://download.docker.com/linux/centos/7/x86_64/stable/Packages/docker-ce-17.09.0.ce-1.el7.centos.x86_64.rpm
+rpm -ivh /root/docker-ce-17.09.0.ce-1.el7.centos.x86_64.rpm
+
+(debian: https://docs.docker.com/engine/installation/linux/docker-ce/debian/#install-docker-ce-1
+如果不能用sudo apt-get install docker-ce直接安装：
+$ sudo apt-get remove docker docker-engine docker.io
+$ sudo apt-get update
+$ sudo apt-get install \
+     apt-transport-https \
+     ca-certificates \
+     curl \
+     gnupg2 \
+     software-properties-common
+(Wheezy及之前的版本用
+    $ sudo apt-get install \
+     apt-transport-https \
+     ca-certificates \
+     curl \
+     python-software-properties
+)
+$ curl -fsSL https://download.docker.com/linux/$(. /etc/os-release; echo "$ID")/gpg | sudo apt-key add -
+如：curl -fsSL https://download.docker.com/linux/debian/gpg | sudo apt-key add -
+官方仓库：
+$ sudo add-apt-repository \
+   "deb [arch=amd64] https://download.docker.com/linux/$(. /etc/os-release; echo "$ID") \
+   $(lsb_release -cs) \
+   stable"
+清华大学镜像仓库：
+$ sudo add-apt-repository \
+   "deb [arch=amd64] https://mirrors.tuna.tsinghua.edu.cn/docker-ce/linux/$(. /etc/os-release; echo "$ID") \
+   $(lsb_release -cs) \
+   stable"
+注：add-apt-repository --remove <http或者ppa:....> 可以删除一个仓库
+清华大学镜像仓库的详细使用方法：https://mirrors.tuna.tsinghua.edu.cn/help/docker-ce/
+$ sudo apt-get update
+$ sudo apt-get install docker-ce
+)
+
+(( manjaro
+$ sudo pacman -S docker docker-compose
+))
+
+将当前用户添加到docker组
+$ sudo usermod -aG docker $USER
+重新登录shell
+
+启动docker
+$ sudo systemctl start docker
+$ sudo systemctl enable docker
+或者（
+$ sudo update-rc.d docker enable
+$ sudo service docker start
+）
+$ docker version
+Client:
+ Version:      17.09.0-ce
+ API version:  1.32
+ Go version:   go1.8.3
+ Git commit:   afdb6d4
+ Built:        Tue Sep 26 22:41:23 2017
+ OS/Arch:      linux/amd64
+
+Server:
+ Version:      17.09.0-ce
+ API version:  1.32 (minimum version 1.12)
+ Go version:   go1.8.3
+ Git commit:   afdb6d4
+ Built:        Tue Sep 26 22:42:49 2017
+ OS/Arch:      linux/amd64
+ Experimental: false
+卸载docker
+# yum remove docker-ce
+删除镜像、容器、卷和自定义配置
+# rm -rf /var/lib/docker
+
+添加私有源
+# vim /etc/docker/daemon.json
+{
+  "insecure-registries": ["192.168.48.10:5000"]
+}
+也可以加入镜像
+"registry-mirrors": ["https://docker.mirrors.ustc.edu.cn/", "https://hub-mirror.c.163.com"]
+# systemctl daemon-reload && systemctl restart docker
+查看insecure-registries和registry-mirrors
+# docker info
+
+安装docker-compose
+方法一：安装源（推荐）
+$ sudo yum makecache fast
+$ sudo yum install docker-compose
+(debian/ubuntu:
+$ sudo apt-get update
+$ sudo apt-get install docker-compose
+$ docker-compose --version
+如果发生错误
+$ pip install --upgrade docker-py
+如果没有安装pip
+$ sudo apt-get install python-pip
+$ mkdir -p ~/.config/pip
+$ vim ~/.config/pip/pip.conf
+[global]
+index-url = https://pypi.tuna.tsinghua.edu.cn/simple
+然后再执行 pip install --upgrade docker-py
+)
+方法二：通过github
+注意版本号通过https://github.com/docker/compose/releases查看最新版，然后替换1.19.0
+$ sudo curl -L https://github.com/docker/compose/releases/download/1.19.0/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
+$ sudo chmod +x /usr/local/bin/docker-compose
+$ docker-compose --version
+(卸载：sudo rm /usr/local/bin/docker-compose)
+
+
+-----------------------------------------------------------------------------
+启动到命令行界面
+graphical.target to multi-user.target 
+$ systemctl get-default 
+graphical.target
+$ sudo systemctl set-default multi-user.target 
+Removed symlink /etc/systemd/system/default.target.
+Created symlink from /etc/systemd/system/default.target to /usr/lib/systemd/system/multi-user.target.
+$ sudo reboot
+// boot to graphical desktop
+$ startx
+
+
+更改所有权
+chown -R youruser:youruser /home/youruser/*
+
+
+更换shell
+# cat /etc/shells
+# echo $SHELL
+# usermod -s /sbin/nologin youruser
+# usermod -s /sbin/bash youruser
+
+
+设置iso作为安装源
+查看网址
+# ip add
+远程拷贝
+$ scp ~/Desktop/CentOS-7-x86_64-Everything-1611.iso root@192.168.48.10:/usr/local/
+远程登录
+$ ssh 192.168.48.10 -l root
+移动文件到/usr/local/iso
+# mkdir /usr/local/iso
+# mv /usr/local/CentOS-7-x86_64-Everything-1611.iso /usr/local/iso/
+修改fstab，挂着iso到/mnt/centiso
+# vi /etc/fstab
+追加：
+/usr/local/iso/CentOS-7-x86_64-Everything-1611.iso /mnt/centiso iso9660 defaults,ro,loop 0 0
+创建挂载点并挂载：
+# mkdir /mnt/centiso
+# mount -a
+# ls /mnt/centiso
+CentOS_BuildTag  EFI  EULA  GPL  images  isolinux  LiveOS  Packages  repodata  RPM-GPG-KEY-CentOS-7  RPM-GPG-KEY-CentOS-Testing-7  TRANS.TBL
+记住这里面的GPG-KEY的文件，将用在yum配置源上
+查看yum源
+# ls /etc/yum.repos.d/
+CentOS-Base.repo  CentOS-Debuginfo.repo  CentOS-Media.repo    CentOS-Vault.repo
+CentOS-CR.repo    CentOS-fasttrack.repo  CentOS-Sources.repo
+新建一个cdrom.repo
+# vi cdrom.repo
+[CDROM]
+name=centiso
+baseurl=file:///mnt/centiso
+enabled=1
+gpgcheck=0
+gkgkey=file///mnt/centiso/RPM-GPG-KEY-CentOS-7
+检查安装源
+# yum list gcc
+Loaded plugins: fastestmirror
+CDROM                                                    | 3.6 kB     00:00
+base                                                     | 3.6 kB     00:00
+...
+可以看见CDROM安装源
+
+
+更换镜像源（https://mirrors.tuna.tsinghua.edu.cn/help/centos/）
+以CentOS 7为例
+# mv /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo.bak 
+# vim /etc/yum.repos.d/CentOS-Base.repo
+-----------------------------------------------
+# CentOS-Base.repo
+#
+# The mirror system uses the connecting IP address of the client and the
+# update status of each mirror to pick mirrors that are updated to and
+# geographically close to the client.  You should use this for CentOS updates
+# unless you are manually picking other mirrors.
+#
+# If the mirrorlist= does not work for you, as a fall back you can try the
+# remarked out baseurl= line instead.
+#
+#
+
+[base]
+name=CentOS-$releasever - Base
+baseurl=https://mirrors.tuna.tsinghua.edu.cn/centos/$releasever/os/$basearch/
+#mirrorlist=http://mirrorlist.centos.org/?release=$releasever&arch=$basearch&repo=os
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+
+#released updates
+[updates]
+name=CentOS-$releasever - Updates
+baseurl=https://mirrors.tuna.tsinghua.edu.cn/centos/$releasever/updates/$basearch/
+#mirrorlist=http://mirrorlist.centos.org/?release=$releasever&arch=$basearch&repo=updates
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+
+#additional packages that may be useful
+[extras]
+name=CentOS-$releasever - Extras
+baseurl=https://mirrors.tuna.tsinghua.edu.cn/centos/$releasever/extras/$basearch/
+#mirrorlist=http://mirrorlist.centos.org/?release=$releasever&arch=$basearch&repo=extras
+gpgcheck=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+
+#additional packages that extend functionality of existing packages
+[centosplus]
+name=CentOS-$releasever - Plus
+baseurl=https://mirrors.tuna.tsinghua.edu.cn/centos/$releasever/centosplus/$basearch/
+#mirrorlist=http://mirrorlist.centos.org/?release=$releasever&arch=$basearch&repo=centosplus
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-CentOS-7
+-----------------------------------------------
+# sudo yum makecache
+
+(( manjaro
+镜像源
+$ sudo pacman-mirrors -i -c China -m rank //更新镜像排名
+然后出现界面勾选某个镜像源
+$ sudo pacman -Syy //更新数据源
+$ sudo pacman -S pacman
+$ sudo pacman -S vim yaourt
+$ sudo vim /etc/yaourtrc
+AURURL="https://aur.tuna.tsinghua.edu.cn"
+$ sudo yaourt -Syy
+在包管理器的设置中，将AUR设置为启用。
+然后可以安装Sogou等输入法。
+))
+
+
+安装sudo
+[ freeBSD
+  pkg install vim sudo ]
+$ su
+# vim /etc/sudoers
+[ freeBSD
+  vim /usr/local/etc/sudoers ]
+在 root  ALL=(ALL) ALL后面添加相同一行，新行的root改成当前用户，然后w!写入，退出vim
+# exit
+$ 
+就可以了。
+
+安装vim
+# yum install vim
+
+安装deltarpm
+# yum provides '*/applydeltarpm'
+# yum install deltarpm
+
+安装开发组工具
+# yum group list | grep "Development Tools"
+# yum group install "Development Tools"
+(debian: apt-get install build-essential)
+
+安装ack
+# yum install epel-release
+# yum install ack
+其中epel-release指的是：Extra Packages for Enterprise Linux (EPEL)
+Fodera直接
+# dnf install ack -y
+Debian
+$ sudo apt install ack-grep
+
+安装zsh
+# cat /etc/shells
+# yum install zsh  [freeBSD #pkg install zsh]
+# zsh --version
+# echo $SHELL
+# chsh -s /bin/zsh  (yum install util-linux-user) [freeBSD #chsh -s /usr/local/bin/zsh]
+如果提示用户名不存在，说明用户不在/etc/passwd中，可能是LDAP-base系统，可以通过下面命令查看用户信息
+        $ getent passwd $USER
+        yourusername:*:700607997:700600513:somedomain.com:/home/yourusername:/bin/bash
+        可以更改.profile或者.bashrc文件（因为上面写了/bin/bash）
+        if [ "$SHELL" != "/bin/zsh" ]
+        then
+            export SHELL="/bin/zsh"
+            exec /bin/zsh -l    # -l: login shell again
+        fi
+
+# zsh
+选择2，生成默认配置文件~/.zshrc
+如果改变失败，可以用usermod命令：
+$ sudo usermod -s /bin/zsh $USER
+(
+创建组和用户
+# groupadd -r bob
+# useradd -g bob bob -d /home/bob -s /bin/bash
+# passwd bob
+# mkdir /home/bob
+# chown -R bob:bob /home/bob
+# vi /etc/sudoer
+...
+)
+
+安装antigen（https://github.com/zsh-users/antigen）
+$ cd ~
+[freeBSD #pkg install curl git]
+$ curl -L git.io/antigen > antigen.zsh
+$ vim ~/.antigenrc
+source $HOME/antigen.zsh
+antigen use oh-my-zsh
+antigen bundles <<EOBUNDLES
+    git
+    #gitfast
+    #git-extras
+    heroku
+    sudo
+    z
+    history
+    cp
+    rsync
+    #encode64
+    #osx
+    #brew
+    #brew-cask
+    #command-not-found
+    zsh-users/zsh-syntax-highlighting
+    zsh-users/zsh-autosuggestions
+    zsh-users/zsh-completions
+EOBUNDLES
+antigen theme clean
+#antigen theme ys
+antigen apply
+$ echo source \$HOME/.antigenrc>~/.zshrc
+****如果不在zsh
+$ zsh
+$ chsh -s /bin/zsh
+****如果在zsh
+$ source ~/.zshrc
+$ antigen list
+如果出现问题可以reset一下：
+$ antigen reset
+
+注意：如果启动zsh时候提示
+zsh compinit: insecure directories, run compaudit for list.
+输入 compaudit 查看不安全的目录，然后用chmod 755（或chown）命令改变这些目录权限
+$ compaudit
+There are insecure directories:
+/home/Bob/.antigen/bundles/robbyrussell/oh-my-zsh/lib
+/home/Bob/.antigen/bundles/robbyrussell/oh-my-zsh/plugins/git
+...
+$ ls -al /home/Bob/.antigen
+drwxrwxrwx 0 Bob Bob   4096 Dec  8 10:00 .
+drwxr-xr-x 0 Bob Bob   4096 Dec  8 10:09 ..
+drwxrwxrwx 0 Bob Bob   4096 Dec  8 09:46 bundles
+...
+看见.和bundles目录的权限不是755
+$ sudo chmod -R 755 /home/Bob/.antigen
+$ compaudit | xargs chmod -R 755
+
+安装oh-my-zsh（如果不喜欢antigen，可以安装oh-my-zsh）
+# sh -c "$(curl -fsSL https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
+或者
+# sh -c "$(wget https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh -O -)"
+# vim ~/.zshrc
+plugins=(git z history sudo)
+删除oh-my-zsh
+# uninstall_oh_my_zsh
+# rm ~/.zshrc
+
+安装fzf（https://github.com/junegunn/fzf）
+$ git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+$ ~/.fzf/install
+更新
+$ cd ~/.fzf && git pull && ./install
+
+更改时区
+# date -R
+# ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+或者
+# cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime
+
+yum清理命令
+# yum autoremove
+清除缓存目录(/var/cache/yum)下的软件包
+# yum clean packages
+清除缓存目录(/var/cache/yum)下的 headers
+# yum clean headers
+清除缓存目录(/var/cache/yum)下旧的 headers
+# yum clean oldheaders
+清除缓存目录(/var/cache/yum)下的软件包及旧的headers
+命令：yum clean, yum clean all (= yum clean packages; yum clean oldheaders)
+
+安装yum管理工具
+yum-utils（yum-config-manager，使用方法见docker-ce在线安装部分）
+# yum --disablerepo=\* --enablerepo=c7-media install yum-utils -y
+
+查看依赖
+# rpm -qpR *.rpm
+
+
+Debian安装deb文件
+$ sudo dpkg -i code_1.19.3-1516876497_i386.deb
+
+Debian的apt命令
+编辑源、更新源
+# apt edit-sources 或者 # vi /etc/apt/sources.list
+# apt update
+查询、安装
+# apt search vsftpd
+# apt install git vim
+删除
+apt-get remove vsftpd
+
+安装开发工具包
+# apt-get install build-essential
+(centos: yum group install "Development Tools")
+
+dnf命令（替代yum的包管理工具）
+查看系统中可用的 DNF 软件库
+# dnf repolist
+查看系统中可用和不可用的所有的 DNF 软件库
+# dnf repolist all
+列出所有 RPM 包
+# dnf list
+列出所有安装了的 RPM 包
+# dnf list installed
+列出所有可供安装的 RPM 包
+# dnf list available
+搜索软件库中的 RPM 包
+# dnf search nano
+查找某一文件的提供者
+# dnf provides /bin/bash
+查看软件包详情
+# dnf info nano
+安装软件包
+# dnf install nano
+升级软件包
+# dnf update systemd
+检查系统软件包的更新
+# dnf check-update
+升级所有系统软件包
+# dnf update 或 # dnf upgrade
+删除软件包
+# dnf remove nano 或 # dnf erase nano
+删除无用孤立的软件包
+# dnf autoremove
+删除缓存的无用软件包
+# dnf clean all
+获取有关某条命令的使用帮助
+# dnf help clean
+查看所有的 DNF 命令及其用途
+# dnf help
+查看 DNF 命令的执行历史
+# dnf history
+查看所有的软件包组
+# dnf grouplist
+安装一个软件包组
+# dnf groupinstall 'Educational Software'
+升级一个软件包组中的软件包
+# dnf groupupdate 'Educational Software'
+删除一个软件包组
+# dnf groupremove 'Educational Software'
+从特定的软件包库安装特定的软件
+# dnf –enablerepo=epel install phpmyadmin
+更新软件包到最新的稳定发行版
+# dnf distro-sync
+重新安装特定软件包
+# dnf reinstall nano
+回滚某个特定软件的版本
+# dnf downgrade acpid
+
+
+关闭防火墙
+# systemctl stop firewalld.service
+# systemctl disable firewalld.service
+
+关闭selinux
+# setenforce 0
+# vim /etc/sysconfig/selinux
+将SELINUX=enforce改为disabled
+
+改密码：
+# passwd
+
+
+查看/var/log/wtmp登录日志
+# last
+查看/var/log/btmp失败的登录日志
+# lastb
+注：可以用-f指定查看的文件名：last -f /var/log/btmp
+查看最近10条登录日志，用dns代替ip地址
+# last -10 -d
+
+
+查找文件
+$ sudo find / -name file.txt
+$ sudo find / -name file.txt 2>/dev/null
+查找命令
+$ which vi
+$ whereis vi
+
+CPU信息
+# cat /proc/cpuinfo
+物理CPU个数
+# cat /proc/cpuinfo| grep "physical id"| sort| uniq| wc -l
+每个物理CPU中core的个数
+# cat /proc/cpuinfo| grep "cpu cores"| uniq
+逻辑CPU的个数
+# cat /proc/cpuinfo| grep "processor"| wc -l
+总核数 = 物理CPU个数 x 每颗物理CPU的核数
+总逻辑CPU数 = 物理CPU个数 x 每颗物理CPU的核数 x 超线程数
+
+磁盘空间
+# df -h
+文件占用空间
+# du --max-depth=1 -h
+# du -sh
+# du -sh /opt/oracle
+
+
+字体
+在/usr/share/fonts/下面创建一个目录，
+# mkdir -p /usr/share/fonts/winFonts
+然后把字体复制到这个目录里，
+# cp ~/Desktop/font/*.ttf /usr/share/fonts/winFonts/
+设置权限最低444
+# chown -R 444 /usr/share/fonts/winFonts/
+然后调用
+# mkfontscale （创建新字体的fonts.scale文件，它用来控制字体旋转缩放）
+# mkfontdir   （创建新字体的fonts.dir文件，它用来控制字体粗斜体产生）
+# fc-cache -fv （建立字体缓存信息，也就是让系统认识认识新字体）
+
+
+删除多余内核
+centos
+# uname -a （查看当前内核）
+# rpm -qa|grep kernel
+# yum remove kernel-2.6.32-279.9.1.el6.x86_64
+debian
+$ uname -a （查看当前内核）
+$ dpkg --get-selections | grep linux
+$ sudo apt-get remove linux-image-2.6.32.21-generic
+$ sudo update-grub
+
+
+主机名
+$ hostname
+debian
+$ cat /etc/hostname
+debian
+详情
+$ hostnamectl
+   Static hostname: debian
+         Icon name: computer-vm
+           Chassis: vm
+        Machine ID: 60ab99cf205c40cd9183a45dcfbd64b2
+           Boot ID: 5cf792f390204c8c85a06309335210e1
+    Virtualization: vmware
+  Operating System: Debian GNU/Linux buster/sid
+            Kernel: Linux 4.13.0-1-amd64
+      Architecture: x86-64
+分别查看
+$ hostnamectl --static
+debian
+$ hostnamectl --transient
+debian
+$ hostnamectl --pretty
+改名
+$ sudo hostnamectl set-hostname debian9 （全部设置）
+$ sudo hostnamectl --static set-hostname debian9 （单独设置）
+手动改名
+$ sudo /etc/hostname
+debian9
+$ sudo /etc/hosts
+debian9 127.0.0.1
+临时改名
+$ hostname tempname
+
+
+发行版本
+$ cat /etc/os-release
+
+
+
+------远程连接------
+sshd:
+先查看运行状态
+# systemctl status sshd.service
+如果未发现，需要手动安装:
+# yum -qa|grep -i ssh (dnf list installed|grep -i ssh)
+openssh.x86_64
+openssh-clients.x86_64
+openssh-server.x86_64
+# yum install openssh
+(ubuntu中已经安装了openssh-client，因此安装Server
+    $ sudo apt install openssh-server
+)
+其配置文件在：/etc/ssh/sshd_config
+最后记得将端口加入防火墙策略里。
+
+启动sshd服务
+# systemctl start sshd.service
+# systemctl enable sshd.service
+
+远程连接
+$ ssh root@192.168.48.128
+
+可以用scp、sftp等命令进行文件传输，简单格式如：
+$ scp [[user@]host1:]file1 ... [[user@]host2:]file2
+
+xstart + ssh:
+终端：/usr/bin/gnome-terminal 
+文件管理器：/usr/bin/nautilus
+其他可以用whereis命令查询
+# where firefox
+# whereis firefox
+
+配置SSH（在本机生成sshkey，然后将公钥加入到远程authorized_keys中）
+$ ssh-keygen -t rsa -b 4096 -C "bob@email.com"
+$ eval "$(ssh-agent -s)"
+Agent pid 28728
+$ ssh-add -k ~/.ssh/id_rsa   // ssh-add -K ~/.ssh/id_rsa
+$ clip < ~/.ssh/id_rsa.pub   // pbcopy < ~/.ssh/id_rsa.pub
+复制id_rsa.pub内容到远程机器，追加到~/.ssh/authorized_keys
+这个文件的权限是600
+
+自动启动ssh-agent和ssh-add
+# vim ~/.bash_profile    // vim ~/.zshrc
+------------------------
+SSH_ENV="$HOME/.ssh/environment"
+
+function start_agent {
+    echo "Initialising new SSH agent..."
+    /usr/bin/ssh-agent | sed 's/^echo/#echo/' > "${SSH_ENV}"
+    echo succeeded
+    chmod 600 "${SSH_ENV}"
+    . "${SSH_ENV}" > /dev/null
+    # /usr/bin/ssh-add -k ~/.ssh/your_id_rsa
+    /usr/bin/ssh-add;
+}
+
+# Source SSH settings, if applicable
+
+if [ -f "${SSH_ENV}" ]; then
+    . "${SSH_ENV}" > /dev/null
+    #ps ${SSH_AGENT_PID} doesn't work under cywgin
+    ps -ef | grep ${SSH_AGENT_PID} | grep ssh-agent$ > /dev/null || {
+        start_agent;
+    }
+else
+    start_agent;
+fi
+
+
+使用putty在pem和ppk之间转换
+*Windows
+https://putty.org/
+https://the.earth.li/~sgtatham/putty/latest/w64/putty-64bit-0.70-installer.msi
+使用puttygen可以生成ppk的可以，然后可通过菜单Conversions->Export OpenSSH key命令，
+导出未 xxxx.gem
+*Linux
+$ sudo yum install putty
+(Dpkg-based:
+  $ sudo apt-get install putty-tools
+)
+// pem to ppk
+$ sudo puttygen xxxx.pem -o xxxx.ppk -O private
+// ppk to pem
+$ sudo puttygen xxxx.ppk -O private-openssh -o xxxx.pem
+
+
+------tarball编译 GnuPG (GPG)------
+https://www.gnupg.org/download/
+linux (tarball) 
+$ mkdir ~/gnupg
+$ cd ~/gnupg
+$ wget https://www.gnupg.org/ftp/gcrypt/gnupg/gnupg-2.2.10.tar.bz2
+wget https://www.gnupg.org/ftp/gcrypt/libgpg-error/libgpg-error-1.32.tar.bz2
+wget https://www.gnupg.org/ftp/gcrypt/libgcrypt/libgcrypt-1.8.3.tar.bz2
+wget https://www.gnupg.org/ftp/gcrypt/libksba/libksba-1.3.5.tar.bz2
+wget https://www.gnupg.org/ftp/gcrypt/libassuan/libassuan-2.5.1.tar.bz2
+wget https://www.gnupg.org/ftp/gcrypt/ntbtls/ntbtls-0.1.2.tar.bz2
+wget https://www.gnupg.org/ftp/gcrypt/npth/npth-1.6.tar.bz2
+wget https://www.gnupg.org/ftp/gcrypt/pinentry/pinentry-1.1.0.tar.bz2
+// wget https://www.gnupg.org/ftp/gcrypt/gpgme/gpgme-1.11.1.tar.bz2
+// wget https://www.gnupg.org/ftp/gcrypt/gpa/gpa-0.9.10.tar.bz2
+
+$ tar xvjf gnupg-2.2.10.tar.bz2
+tar xvjf libgpg-error-1.32.tar.bz2
+tar xvjf libgcrypt-1.8.3.tar.bz2
+tar xvjf libksba-1.3.5.tar.bz2
+tar xvjf libassuan-2.5.1.tar.bz2
+tar xvjf ntbtls-0.1.2.tar.bz2
+tar xvjf npth-1.6.tar.bz2
+tar xvjf pinentry-1.1.0.tar.bz2
+// tar xvjf gpgme-1.11.1.tar.bz2
+// tar xvjf gpa-0.9.10.tar.bz2
+
+// 编译安装GnuPG组件
+$ cd libgpg-error-1.32
+$ ./configure
+$ sudo make && sudo make install
+
+$ cd ../libgcrypt-1.8.3
+$ ./configure
+$ sudo make && sudo make install
+
+$ cd ../libksba-1.3.5
+$ ./configure
+$ sudo make && sudo make install
+
+$ cd ../libassuan-2.5.1
+$ ./configure
+$ sudo make && sudo make install
+
+$ cd ../ntbtls-0.1.2
+$ ./configure
+$ sudo make && sudo make install
+
+$ cd ../npth-1.6
+$ ./configure
+$ sudo make && sudo make install
+
+// 编译安装GnuPG
+$ cd ../gnupg-2.2.10
+$ ./configure
+$ sudo make -j8 && sudo make install
+
+$ whereis gpg
+gpg: /usr/bin/gpg /usr/local/bin/gpg /usr/share/man/man1/gpg.1.gz
+
+$ /usr/local/bin/gpg --version
+/usr/local/bin/gpg: error while loading shared libraries: libgcrypt.so.20: cannot open shared object file: No such file or directory
+正常会显示版本信息，如果出现这个错误，先获得libgcrypt.so.20文件的位置，然后加入变量LD_LIBRARY_PATH中：
+$ whereis libgcrypt.so.20
+libgcrypt.so: /usr/lib/libgcrypt.so.11 /usr/lib64/libgcrypt.so.11 /usr/local/lib/libgcrypt.so.20 /usr/local/lib/libgcrypt.so
+$ export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+$ /usr/local/bin/gpg --version
+gpg (GnuPG) 2.2.10
+libgcrypt 1.8.3
+Copyright (C) 2018 Free Software Foundation, Inc.
+...
+将环境变量添加到启动配置，如.bashrc中
+$ echo export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH >> ~/.bashrc
+
+同理检查PATH环境变量，使/usr/local/bin在/usr/bin前，然gpg命令直接运行我们编译的版本。
+重新进入会话，输入 gpg --version 应该是刚才安装的版本。
+
+必要组件安装：
+---
+// 用于输入密码保护（必须）
+$ cd ../pinentry-1.1.0
+$ ./configure
+$ sudo make && sudo make install
+
+---
+下面两个可选，可能需要修改库的路径，configure才能正确通过。
+// GPGME is the standard library to access GnuPG functions from programming languages. 
+$ cd ../gpgme-1.11.1
+$ ./configure
+$ sudo make && sudo make install
+
+// GPA is a graphical frontend to GnuPG. 
+$ cd ../gpa-0.9.10
+$ ./configure
+$ sudo make && sudo make install
+---
+
+
+最后可删除无用的源文件
+$ cd ~
+$ sudo rm -rf gnupg
+
+-----------------
+使用
+-----------------
+1. 查看已有的GPG keys
+$ gpg --list-secret-keys --keyid-format LONG
+
+2. 创建一个GPG key
+$ gpg --full-generate-key
+
+gpg (GnuPG) 2.2.10; Copyright (C) 2018 Free Software Foundation, Inc.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+Please select what kind of key you want:
+   (1) RSA and RSA (default)
+   (2) DSA and Elgamal
+   (3) DSA (sign only)
+   (4) RSA (sign only)
+Your selection?
+RSA keys may be between 1024 and 4096 bits long.
+What keysize do you want? (2048)
+Requested keysize is 2048 bits
+Please specify how long the key should be valid.
+         0 = key does not expire
+      <n>  = key expires in n days
+      <n>w = key expires in n weeks
+      <n>m = key expires in n months
+      <n>y = key expires in n years
+Key is valid for? (0)
+Key does not expire at all
+Is this correct? (y/N) y
+
+GnuPG needs to construct a user ID to identify your key.
+
+Real name: yourname
+Email address: yourname@email.com
+Comment: demo
+You selected this USER-ID:
+    "yourname (demo) <yourname@email.com>"
+
+Change (N)ame, (C)omment, (E)mail or (O)kay/(Q)uit? o
+We need to generate a lot of random bytes. It is a good idea to perform
+some other action (type on the keyboard, move the mouse, utilize the
+disks) during the prime generation; this gives the random number
+generator a better chance to gain enough entropy.
+We need to generate a lot of random bytes. It is a good idea to perform
+some other action (type on the keyboard, move the mouse, utilize the
+disks) during the prime generation; this gives the random number
+generator a better chance to gain enough entropy.
+gpg: key F461FA2D923C3798 marked as ultimately trusted
+gpg: revocation certificate stored as '/home/yourname/.gnupg/openpgp-revocs.d/BA4CF1650621335540E42DB5F461FA2D923C3798.rev'
+public and secret key created and signed.
+
+pub   rsa2048 2018-09-18 [SC]
+      BA4CF1650621335540E42DB5F461FA2D923C3798
+uid                      yourname (demo) <yourname@email.com>
+sub   rsa2048 2018-09-18 [E]
+
+3. 导出GPG key
+$ gpg --list-secret-keys --keyid-format LONG
+/home/yourname/.gnupg/pubring.gpg
+------------------------
+
+sec   rsa2048/F461FA2D923C3798 2018-09-18 [SC]
+      BA4CF1650621335540E42DB5F461FA2D923C3798
+uid                 [ultimate] yourname (demo) <yourname@email.com>
+ssb   rsa2048/96E3D9B0C023B825 2018-09-18 [E]
+
+记住sec中算法后面的值，输入在下面
+（说明：也可以用邮箱地址替换这个KEY值）
+$ gpg --armor --export F461FA2D923C3798
+
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+
+mQENBFugt1QBCACpIrObmogNUtVRGogRUub4GmP+4IlZxu+Q5ExhGHFNhdTOEbii
+9OT4Vy6snZoURWwxKPNu5/W35cs57+tv/FjVEqp1fDgnhK8YHo1AtfO5Yjqq/UR/
+mPBdOBsKlstKl9+cCR/dv+uE23/fJnNqfbLZUyv8GRPwBh7OggX2MO4elzzzujnH
+...
+-----END PGP PUBLIC KEY BLOCK-----
+
+复制包括-----BEGIN PGP PUBLIC KEY BLOCK-----和-----END PGP PUBLIC KEY BLOCK-----的全部内容。
+
+4. 添加一个user id到GPG key
+$ gpg --edit-key F461FA2D923C3798
+> adduid
+Real name: myname
+Email address: myname@email.com
+Comment:
+You selected this USER-ID:
+    "myname <myname@email.com>"
+
+Change (N)ame, (C)omment, (E)mail or (O)kay/(Q)uit? o
+
+sec  rsa2048/F461FA2D923C3798
+     created: 2018-09-18  expires: never       usage: SC
+     trust: ultimate      validity: ultimate
+ssb  rsa2048/96E3D9B0C023B825
+     created: 2018-09-18  expires: never       usage: E
+[ultimate] (1)  yourname (demo) <yourname@email.com>
+[ unknown] (2). myname <myname@email.com>
+
+> quit
+Save changes? (y/N) y
+可以使用help了解更多命令。
+
+5. 应用
+- 可在github设置 -> SSH and GPG keys里，添加生成PGP KEY，注意使用对应的邮箱和user id的GPG KEY
+- 可用于git签名，如
+  $ git config --global user.signingkey F461FA2D923C3798
+  
+  提交的签名
+  $ git config commit.gpgsign true
+  $ git config --global commit.gpgsign true
+  然后提交代码（-S）：
+  $ git commit -S -m your commit message
+  
+  tag的签名（-s）
+  $ git tag -s mytag
+  验证（-v）
+  $ git tag -v mytag
+  
+- 使用gpg-agent帮助减少密码输入，可将下面命令写入~/.xsession、 ~/.profile或者.bash_profile等启动文件
+  eval $(gpg-agent --daemon)
+
+
+
+-----------------
+排除故障
+-----------------
+故障：Inappropriate ioctl for device
+解决：
+$ echo "test" | gpg --clearsign
+如果提示 Inappropriate ioctl for device，设置变量指向tty
+$ export GPG_TTY=$(tty)
+$ echo 'export GPG_TTY=$(tty)' >> ~/.zshrc    // 或者.bashrc, .bash_profile
+
+
+故障：apt: Unknown error executing apt-key
+解决：
+sudo apt-get clean
+sudo rm /var/lib/apt/lists/*
+sudo rm /var/lib/apt/lists/partial/*
+sudo apt-get clean
+sudo apt-get update
+
+
+
+----------tarball编译git----------
+https://www.kernel.org/pub/software/scm/git/
+**********centos命令如下：
+$ sudo su
+# yum install gcc gcc-c++ perl-ExtUtils-MakeMaker -y
+# yum install curl-devel expat-devel gettext-devel openssl-devel zlib-devel -y
+下载git源码（curl和wget选一个即可）
+# wget -P /usr/src/git-2.19.0 https://www.kernel.org/pub/software/scm/git/git-2.19.0.tar.gz
+// # curl --create-dirs -o /usr/src/git-2.19.0/git-2.19.0.tar.gz https://www.kernel.org/pub/software/scm/git/git-2.19.0.tar.gz
+# chmod -R 755 /usr/src/git-2.19.0/
+解压安装
+# cd /usr/src/git-2.19.0/
+# tar zxf git-2.19.0.tar.gz
+# cd git-2.19.0
+# ./configure --prefix=/usr/local/
+# make install
+查看结果，删除yum的git和git-2.19.0.tar.gz
+# whereis git
+git: /usr/bin/git /usr/local/bin/git /usr/share/man/man1/git.1.gz
+# /usr/local/bin/git --version
+git version 2.19.0
+# rm -f /usr/src/git-2.19.0/git-2.19.0.tar.gz
+# yum remove git
+# yum autoremove -y
+# exit
+$ git version
+git version 2.19.0
+
+
+**********debian命令如下：
+$ sudo apt update
+$ sudo apt install -y build-essential
+$ sudo apt install -y libcurl4-gnutls-dev libexpat1-dev gettext libz-dev libssl-dev
+$ sudo curl --create-dirs -o /usr/src/git-2.19.0/git-2.19.0.tar.gz https://www.kernel.org/pub/software/scm/git/git-2.19.0.tar.gz
+（或）
+$ sudo wget -P /usr/src/git-2.19.0 https://www.kernel.org/pub/software/scm/git/git-2.19.0.tar.gz
+$ cd /usr/src/git-2.19.0/
+$ sudo tar zxf git-2.19.0.tar.gz
+$ cd git-2.19.0
+$ sudo ./configure --prefix=/usr/local/
+$ sudo make install
+$ whereis git
+git: /usr/bin/git /usr/local/bin/git /usr/share/man/man1/git.1.gz
+$ /usr/local/bin/git version
+git version 2.15.1
+$ sudo rm -f /usr/src/git-2.19.0/git-2.19.0.tar.gz
+$ sudo apt remove git
+$ sudo apt autoremove
+
+
+
+--------------------------
+git lfs
+--------------------------
+MacOS
+$ brew install git-lfs
+
+Linux
+$ mkdir git-lfs
+$ cd git-lfs
+$ wget https://github.com/git-lfs/git-lfs/releases/download/v2.5.1/git-lfs-linux-amd64-v2.5.1.tar.gz
+$ tar xvzf git-lfs-linux-amd64-v2.5.1.tar.gz
+$ sudo ./install.sh
+$ git lfs version
+$ cd ..
+$ rm -rf git-lfs
+
+
+--------------------------
+git flow
+--------------------------
+https://github.com/nvie/gitflow
+https://github.com/nvie/gitflow/wiki/Linux
+安装方式一：
+MacOS
+$ brew install git-flow
+或者
+$ wget --no-check-certificate -q -O - https://github.com/nvie/gitflow/raw/develop/contrib/gitflow-installer.sh | sudo bash
+Debian
+$ apt-get install git-flow
+Fedora
+$ yum install gitflow
+
+安装方式二：手动安装
+手动安装方法1（推荐）
+$ git clone --recursive git://github.com/nvie/gitflow.git
+$ cd gitflow
+$ sudo make install
+如果安装到其他目录，可以 $ sudo make prefix=/opt/local install
+$ git flow version
+$ cd ..
+$ rm -rf gitflow
+
+手动安装方法2
+$ wget -q -O - https://github.com/nvie/gitflow/raw/develop/contrib/gitflow-installer.sh | sh
+删除
+$ sudo ./gitflow-installer.sh uninstall
+
+版本：git flow version
+zsh插件：git-flow、bobthecow/git-flow-completion
+如果提示zsh compinit: insecure directories, run compaudit for list.
+可以用下面命令更改权限
+compaudit | xargs chmod -R 755
+
+使用：分支feature/demo1，修改后合并到develop分支
+$ git clone ...
+$ cd ...
+$ git flow init -d
+$ git flow feature start demo1
+// 修改代码
+$ git flow feature finish demo1
+
+分支模式学习文档：
+https://danielkummer.github.io/git-flow-cheatsheet/index.html
+https://nvie.com/posts/a-successful-git-branching-model/
+
+
+----------Debian 安装图形界面----------
+$ sudo apt edit-sources
+deb http://ftp2.cn.debian.org/debian/ testing main non-free contrib
+deb-src http://ftp2.cn.debian.org/debian/ testing main non-free contrib
+deb http://ftp2.cn.debian.org/debian/ testing-updates main non-free contrib
+deb-src http://ftp2.cn.debian.org/debian/ testing-updates main non-free contrib
+deb http://ftp2.cn.debian.org/debian-security/ testing/updates main
+deb-src http://ftp2.cn.debian.org/debian-security/ testing/updates main
+注：更多镜像源列表：
+https://www.debian.org/mirror/list
+官方一直维护着至少三个发行版本："稳定版（stable）"，"测试版（testing）"和"不稳定版（unstable）"。
+稳定版的版本代号：
+    https://www.debian.org/releases/index.zh-cn.html
+    下一代 Debian 正式发行版的代号为 "buster" — 发布时间尚未确定
+    Debian 9（"stretch"） — 当前的稳定版
+    Debian 8（"jessie"） — 被淘汰的稳定版
+    Debian 7（"wheezy"） — 被淘汰的稳定版
+    Debian 6.0（"squeeze"） — 被淘汰的稳定版
+    Debian GNU/Linux 5.0（"lenny"） — 被淘汰的稳定版
+    Debian GNU/Linux 4.0（"etch"） — 被淘汰的稳定版
+    Debian GNU/Linux 3.1（"sarge"） — 被淘汰的稳定版
+    Debian GNU/Linux 3.0（"woody"） — 被淘汰的稳定版
+    Debian GNU/Linux 2.2（"potato"） — 被淘汰的稳定版
+    Debian GNU/Linux 2.1（"slink"） — 被淘汰的稳定版
+    Debian GNU/Linux 2.0（"hamm"） — 被淘汰的稳定版
+
+更新全部软件
+$ sudo apt update
+$ sudo apt list --upgradable
+$ sudo apt upgrade
+$ sudo autoremove
+
+
+*** 一键安装推荐的Gnome Desktop或KDE ***
+$ sudo apt install task-gnome-desktop
+$ sudo apt install task-kde-desktop
+参见：
+https://wiki.debian.org/Gnome
+https://wiki.debian.org/KDE
+
+[freeBSD
+# pkg update
+# pkg upgrade
+# pkg autoremove
+--- Gnome 3 ---
+https://www.freebsd.org/doc/handbook/x11-wm.html
+# pkg install gnome3
+# vi /etc/fstab
+proc    /proc   procfs  rw  0   0
+# vi /etc/rc.conf
+dbus_enable="YES"
+hald_enable="YES"
+gdm_enable="YES"
+gnome_enable="YES"
+% echo "exec /usr/local/bin/gnome-session" > ~/.xinitrc
+如果使用XDM，用下面代替
+% echo ". /usr/local/etc/xdg/xfce4/xinitrc" > ~/.xsession
+--- KDE 4 ---
+# pkg install x11/kde4
+# vi /etc/fstab
+proc    /proc   procfs  rw  0   0
+# vi /etc/rc.conf
+dbus_enable="YES"
+hald_enable="YES"
+kdm4_enable="YES"
+% echo "exec /usr/local/bin/startkde" > ~/.xsession
+--- Xfce ---
+# pkg install xfce
+# vi /etc/rc.conf
+dbus_enable="YES"
+% echo ". /usr/local/etc/xdg/xfce4/xinitrc" > ~/.xinitrc
+如果使用XDM，用下面代替
+% echo ". /usr/local/etc/xdg/xfce4/xinitrc" > ~/.xsession
+]
+
+(( manjaro
+https://wiki.manjaro.org/index.php/Install_Desktop_Environments
+$ sudo pacman -S plasma kio-extras    // 必须
+$ sudo pacman -S kde-applications
+$ sudo systemctl enable sddm.service --force    // 建议使用SDDM
+$ reboot
+$ sudo pacman -S manjaro-kde-settings sddm-breath-theme manjaro-settings-manager-knotifier manjaro-settings-manager-kcm
+$ /usr/bin/cp -rf /etc/skel/. ~
+))
+
+*** 手动安装KDE（wayland）***
+$ sudo apt install plasma-workspace-wayland/testing
+$ sudo apt install lightdm
+$ sudo reboot now
+如果“开始”菜单异常，窗口没有边框，尝试移除kwin-wayland
+$ sudo remove kwin-wayland
+$ sudo autoremove
+
+终端模拟器
+Kconsole，按Alt+F2输入terminal，最下面的就是，如果没有，手动安装。
+
+$ sudo apt install net-tools
+$ sudo apt install ttf-mscorefonts-installer
+
+如果打开Trash有问题
+$ sudo apt install konqueror
+然后在System Settings的Default Applications里选择File Manager为Konqueror
+
+$ sudo apt search firefox
+$ sudo apt install firefox-esr-l10n-zh-cn
+
+输入法
+$ sudo apt install fcitx fcitx-googlepinyin
+
+(( manjaro
+$ sudo pacman -S fcitx fcitx-configtool fcitx-googlepinyin fcitx-gtk2 fcitx-gtk3 fcitx-m17n fcitx-qt4 fcitx-qt5 
+$ vim ~/.xprofile
+export GTK_IM_MODULE=fcitx
+export QT_IM_MODULE=fcitx
+export XMODIFIERS=@im=fcitx
+$ sudo reboot
+))
+
+
+中文字体
+$ sudo yum install fontconfig mkfontscale
+$ sudo yum install google-noto-sans-simplified-chinese-fonts google-noto-sans-traditional-chinese-fonts
+
+
+------------------------
+启动到命令行
+1) 修改Grub为命令行方式
+$ sudo vim /etc/default/grub
+更改GRUB_CMDLINE_LINUX值为text：
+GRUB_CMDLINE_LINUX_DEFAULT="quiet"
+GRUB_CMDLINE_LINUX=""
+为
+GRUB_CMDLINE_LINUX_DEFAULT="quiet"
+GRUB_CMDLINE_LINUX="text"
+反注释
+GRUB_TERMINAL=console
+$ sudo /usr/sbin/update-grub
+2) 修改系统为命令行方式
+$ sudo systemctl set-default multi-user.target 
+改回图形界面的方式
+$ sudo systemctl set-default graphical.target 
+
+
+
+------- fish-shell -------
+fish-shell(https://github.com/fish-shell/fish-shell)
+centos 7:
+$ cd /etc/yum.repos.d/
+$ wget https://download.opensuse.org/repositories/shells:fish:release:2/CentOS_7/shells:fish:release:2.repo
+$ yum install fish
+debian 9:
+$ echo 'deb http://download.opensuse.org/repositories/shells:/fish:/release:/2/Debian_9.0/ /' > /etc/apt/sources.list.d/fish.list 
+$ apt-get update
+$ apt-get install fish
+fedora 26:
+$ dnf config-manager --add-repo https://download.opensuse.org/repositories/shells:fish:release:2/Fedora_26/shells:fish:release:2.repo
+$ dnf install fish
+ubuntu fish PPA:
+$ sudo apt-add-repository ppa:fish-shell/release-2
+$ sudo apt-get update
+$ sudo apt-get install fish
+
+Oh-my-fish(https://github.com/oh-my-fish/oh-my-fish)
+$ curl -L https://get.oh-my.fish | fish
+
+$ echo $OMF_CONFIG
+~/.config/omf
+$ omf list
+Plugins
+fish-spec	omf
+
+Themes
+default
+$ omf install eden
+$ omf theme eden
+
+
+
+
+------- vim spf13 插件 -------
+** ubuntu:
+VIM插件spf13-vim
+因为spf13-vim 中的neocomplete.vim插件需要lua支持，所以要卸载vim，下载源代码，然后+lua编译vim
+vim with lua：
+$ cd ~
+$ sudo apt-get remove --purge vim
+$ sudo apt-get autoclean
+$ sudo apt-get install python-dev python3-dev ruby-dev luajit liblua5.1-dev libluajit-5.1 libperl-dev libncurses5-dev
+$ sudo rm -rf /usr/local/share/vim
+$ sudo rm /usr/bin/vim
+$ sudo mkdir -p /usr/include/lua5.1/include
+$ sudo cp /usr/include/lua5.1/*.h /usr/include/lua5.1/include/
+$ cd ~
+$ git clone --depth 1 https://github.com/vim/vim.git
+$ cd ~/vim/src
+$ make distclean
+$ ./configure --with-features=huge \
+--enable-largefile \
+--enable-multibyte \
+--enable-perlinterp \
+--enable-rubyinterp \
+--enable-luainterp \
+--enable-python3interp \
+--with-python3-config-dir=/usr/lib/python3.5/config-3.5m-x86_64-linux-gnu \
+--with-luajit \
+--enable-fail-if-missing \
+--with-lua-prefix=/usr/include/lua5.1 \
+--enable-cscope \
+--enable-gui=auto
+
+注意：python3 和 python 同时给定，优先会使用python
+--enable-pythoninterp \
+--with-python-config-dir=/usr/lib/python2.7/config \
+
+$ make -j8
+$ sudo make install
+
+$ whereis vim
+vim: /usr/local/bin/vim /usr/share/man/man1/vim.1
+$ vim --version
+
+** centos:
+$ sudo yum remove vim
+$ sudo yum install -y ruby ruby-devel lua lua-devel luajit luajit-devel ctags mercurial python python-devel python3 python3-devel tcl-devel perl perl-devel perl-ExtUtils-ParseXS perl-ExtUtils-XSpp perl-ExtUtils-CBuilder perl-ExtUtils-Embed ncurses-devel
+$ git clone --depth 1 https://github.com/vim/vim.git
+$ cd vim
+$ sudo make distclean
+$ ./configure --with-features=huge --enable-multibyte --enable-rubyinterp --enable-pythoninterp --enable-perlinterp --enable-luainterp --enable-gui=gtk2 --enable-cscope --with-tlib=ncurses --prefix=/usr
+$ sudo make install
+
+$ vim ~/.zshrc             ; 如果vi没有指向我们编译的vim，可以将vi别名vim
+在结尾加入：
+alias vi=vim
+$ source ~/.zshrc
+
+** mac:
+macvim
+brew install macvim --with-cscope --with-lua --with-override-system-vim
+brew linkapps macvim    #将MacVim程序加入到Launchpad中
+
+终端运行macvim：（位置：/usr/local/bin/mvim）
+mvim     #会打开macvim新窗口
+mvim -v  #会在当前终端中运行
+
+(( manjaro
+$ sudo pacman -S vim
+然后安装spf13即可
+))
+
+
+安装spf13-vim（https://github.com/spf13/spf13-vim）：
+$ cd ~
+$ sudo apt-get install curl exuberant-ctags  //ubuntu
+
+-可用-
+$ curl https://raw.githubusercontent.com/m2nlight/spf13-vim/3.0/bootstrap.sh -L > spf13-vim.sh && sh spf13-vim.sh
+
+-代替下面的内容-
+$ curl https://j.mp/spf13-vim3 -L > spf13-vim.sh && sh spf13-vim.sh
+或者
+  $ curl https://raw.githubusercontent.com/spf13/spf13-vim/3.0/bootstrap.sh -L > spf13-vim.sh && sh spf13-vim.sh
+或者
+  $ git clone --depth 1 https://github.com/spf13/spf13-vim.git
+  $ mv spf13-vim ~/.spf13-vim-3
+  $ ~/.spf13-vim-3/bootstrap.sh
+等待插件安装完成。
+当出现amirh/HTML-AutoCloseTag错误（提示是登陆github），按Ctrl+w，jj跳过这个错误
+全部安装后
+$ vim ~/.vimrc.bundles
+找到amirh，替换为okayliao，保存退出后用下面命令重新安装一遍插件。
+$ vim +BundleInstall! +BundleClean +q
+
+
+----显示用户和组----
+cat /etc/passwd
+cat /etc/group
+
+查看用户：
+cut -d : -f 1 /etc/passwd
+getent passwd $USER
+可以登录的用户：
+cat /etc/passwd | grep -v /sbin/nologin | cut -d : -f 1
+
+
+
+
+
+----清华大学镜像源----
+https://mirrors.tuna.tsinghua.edu.cn/help/centos/
+https://mirrors.tuna.tsinghua.edu.cn/help/ubuntu/
+https://mirrors.tuna.tsinghua.edu.cn/help/pypi/
+...
+
+
+
+----VNC----
+VNC，在Windows端可以使用TightVNC/UltraVNC来连接Linux gnome桌面。
+以ubuntu为例，在程序里打开Desktop Sharing程序，即可进行VNC配置，
+默认是安全连接的，如果使用TightVNC连接，则需要关闭其安全连接，命令：
+$ gsettings get org.gnome.Vino require-encryption
+true
+$ gsettings set org.gnome.Vino require-encryption false
+
+另外，Ubuntu gnome还有一个Remmina Remote Desktop Client软件，用来连接包括VNC方法在内的客户端工具。
+
+
+----重置root密码----
+适用于systemd的centos等发行版本。如果启用了LUKS等加密硬盘，需要输入LUKS密码。
+1. 在GRUB引导界面，输入e，进入编辑界面
+2. 将光标移动到Linux16这行，删除rhgb quiet，替换为rd.break enforcing=0
+   然后按下Ctrl+X启动，系统进入紧急模式
+3. 挂载硬盘然后修改密码：
+   # mount -o remount,rw /sysroot
+   # chroot /sysroot
+   # passwd
+   修改后输入两次exit重启系统
+4. 用root身份登陆恢复/etc/shadow的SELinux标签
+   # restorecon -v /etc/shadow
+   # setenforce 1
+
+
+----pacman----
+*自升级
+pacman -S pacman
+*查询
+pacman -Ss yaourt
+*安装
+pacman -S yaourt vim curl git
+*删除
+pacman -R yaourt
+pacman -Rs yaourt  // 同时删除无用的依赖
+*删除无用的包
+sudo pacman -Rcs $(pacman -Qdtq)  // 比-R移除，包括递归软件包
+sudo pacman -R $(pacman -Qdtq)
+*全部升级
+pacman -Syu
+或者pacman -Syyu
+*清理和回滚
+以根用户权限执行降级系统命令。为了顺利执行，可能需要先清除系统缓存
+缓存位置：/var/cache/pacman/pkg
+pacman -Scc
+# 启用降级
+pacman -Syyuu
+
+----工具----
+*7Z
+sudo yum install p7zip
+sudo apt install p7zip-full
+sudo pacman -S p7zip
+
+* HTOP
+sudo yum install htop
+sudo apt install htop
+sudo dnf install htop
+sudo pacman -S htop
+brew install htop
+
+* HTTPIE
+sudo pip3 install httpie
+brew install httpie
+
+* CHT.SH
+curl cht.sh/:help
+
+sudo pacman -S xsel rlwrap
+mkdir -p ~/bin
+curl https://cht.sh/:cht.sh > ~/bin/cht.sh
+chmod +x ~/bin/cht.sh
+~/bin/cht.sh python :learn
+~/bin/cht.sh --shell
+
+
+* AXEL
+sudo apt install axel
+sudo pacman -S axel
+
+* Google Chrome Browser (注意不支持32位)
+***rhel/centos/fedora
+# vim /etc/yum.repos.d/google-chrome.repo
+[google-chrome]
+name=google-chrome
+baseurl=http://dl.google.com/linux/chrome/rpm/stable/$basearch
+enabled=1
+gpgcheck=1
+gpgkey=https://dl-ssl.google.com/linux/linux_signing_key.pub
+# yum info google-chrome-stable
+# yum install google-chrome-stable
+// 更新
+# yum update google-chrome-stable
+
+***debian/ubuntu
+# echo 'deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main' > /etc/apt/sources.list.d/google-chrome.list
+或者编辑/etc/apt/sources.list，加入 deb http://dl.google.com/linux/chrome/deb/ stable main
+# wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+或者
+    wget https://dl-ssl.google.com/linux/linux_signing_key.pub
+    apt-key add linux_signing_key.pub
+
+# apt-get update
+# apt-get install google-chrome-stable
+
+***arch/manjaro (编译离线版本)
+方法一(推荐)：yaourt
+# yaourt -S google-chrome
+按提示输入如下：
+Edit PKGBUILD ? n
+Edit google-chrome.install ? n
+Continue building google-chrome ? y
+等待打包完成，提示导出 google-chrome 到 /var/cache/pacman/pkg/ 目录，可能要输入密码。
+Continue installing google-chrome ? y
+::Proceed with installation? y
+等待安装完成。
+方法二：不使用yaourt
+打开 https://aur.archlinux.org/packages/google-chrome/
+复制 Git Clone URL: https://aur.archlinux.org/google-chrome.git
+$ git clone --depth 1 https://aur.archlinux.org/google-chrome.git
+$ cd google-chrome
+$ makepkg -s
+等待下载打包完成，会得到 google-chrome-69.0.3497.92-1-x86_64.pkg.tar.xz
+然后用pacman安装
+$ sudo pacman -U google-chrome-69.0.3497.92-1-x86_64.pkg.tar.xz
+安装完成后可删除不要的文件
+$ cd ..
+$ rm -rf google-chrome

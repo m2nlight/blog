@@ -1,5 +1,11 @@
 # Blog
 
+## 推荐
+
+- [centos.txt](Docs/centos.txt)
+
+## 旧的
+
 1. [CentOS 7 安装和配置 Mysql 5.6 和 Gogs.md](Docs/CentOS%207%20安装和配置%20Mysql%205.6%20和%20Gogs.md)
 2. [Git 命令别名和常用技巧](Docs/Git%20命令别名和常用技巧.md)
 3. [MySQL Entity EF6 配置 ADO.NET 实体数据模型](Docs/MySQL%20Entity%20EF6%20配置%20ADO.NET%20实体数据模型.md)
