@@ -1157,7 +1157,9 @@ $ sudo puttygen xxxx.ppk -O private-openssh -o xxxx.pem
 ------tarball编译 GnuPG (GPG)------
 mac
 $ brew install gpg pinentry pinentry-mac
-然后到参考后面的 Inappropriate ioctl for device 配置环境变量。
+$ echo "pinentry-program /usr/local/bin/pinentry-mac" >> ~/.gnupg/gpg-agent.conf
+$ killall gpg-agent
+如果使用期间发生错误，参考后面的 Inappropriate ioctl for device 配置环境变量。
 
 https://www.gnupg.org/download/
 linux (tarball) 
