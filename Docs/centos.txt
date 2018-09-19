@@ -1156,7 +1156,7 @@ $ sudo puttygen xxxx.ppk -O private-openssh -o xxxx.pem
 
 ------tarball编译 GnuPG (GPG)------
 mac
-$ brew install gpg
+$ brew install gpg pinentry pinentry-mac
 然后到参考后面的 Inappropriate ioctl for device 配置环境变量。
 
 https://www.gnupg.org/download/
@@ -1318,7 +1318,7 @@ pub   rsa2048 2018-09-18 [SC]
 uid                      yourname (demo) <yourname@email.com>
 sub   rsa2048 2018-09-18 [E]
 
-3. 导出GPG key
+3. 生成吊销证书
 $ gpg --list-secret-keys --keyid-format LONG
 /home/yourname/.gnupg/pubring.gpg
 ------------------------
@@ -1330,6 +1330,11 @@ ssb   rsa2048/96E3D9B0C023B825 2018-09-18 [E]
 
 记住sec中算法后面的值，输入在下面
 （说明：也可以用邮箱地址替换这个KEY值）
+
+$ gpg --gen-revoke F461FA2D923C3798
+
+
+4. 导出GPG key
 $ gpg --armor --export F461FA2D923C3798
 
 -----BEGIN PGP PUBLIC KEY BLOCK-----
@@ -1342,7 +1347,7 @@ mPBdOBsKlstKl9+cCR/dv+uE23/fJnNqfbLZUyv8GRPwBh7OggX2MO4elzzzujnH
 
 复制包括-----BEGIN PGP PUBLIC KEY BLOCK-----和-----END PGP PUBLIC KEY BLOCK-----的全部内容。
 
-4. 添加一个user id到GPG key
+5. 添加一个user id到GPG key
 $ gpg --edit-key F461FA2D923C3798
 > adduid
 Real name: myname
@@ -1365,7 +1370,7 @@ ssb  rsa2048/96E3D9B0C023B825
 Save changes? (y/N) y
 可以使用help了解更多命令。
 
-5. 应用
+6. 应用
 - 可在github设置 -> SSH and GPG keys里，添加生成PGP KEY，注意使用对应的邮箱和user id的GPG KEY
 - 可用于git签名，如
   $ git config --global user.signingkey F461FA2D923C3798
@@ -1383,8 +1388,6 @@ Save changes? (y/N) y
   
 - 使用gpg-agent帮助减少密码输入，可将下面命令写入~/.xsession、 ~/.profile或者.bash_profile等启动文件
   eval $(gpg-agent --daemon)
-
-
 
 -----------------
 排除故障
