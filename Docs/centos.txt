@@ -1160,6 +1160,11 @@ $ brew install gpg pinentry pinentry-mac
 $ echo "pinentry-program /usr/local/bin/pinentry-mac" >> ~/.gnupg/gpg-agent.conf
 $ killall gpg-agent
 如果使用期间发生错误，参考后面的 Inappropriate ioctl for device 配置环境变量。
+SourceTree支持：
+$ ls -la /usr/local/bin/gpg
+lrwxr-xr-x /usr/local/bin/gpg -> ../Cellar/gnupg/2.2.10/bin/gpg
+$ ln -s /usr/local/bin/gpg /usr/local/bin/gpg2
+在SourceTree的配置界面，点“高级”，更改“GPG程序”路径为 /usr/local/bin。
 
 https://www.gnupg.org/download/
 linux (tarball) 
@@ -1416,7 +1421,7 @@ sudo apt-get update
 https://www.kernel.org/pub/software/scm/git/
 **********centos命令如下：
 $ sudo su
-# yum install gcc gcc-c++ perl-ExtUtils-MakeMaker -y
+# yum install curl wget gcc gcc-c++ perl-ExtUtils-MakeMaker -y
 # yum install curl-devel expat-devel gettext-devel openssl-devel zlib-devel -y
 下载git源码（curl和wget选一个即可）
 # wget -P /usr/src/git-2.19.0 https://www.kernel.org/pub/software/scm/git/git-2.19.0.tar.gz
@@ -1434,7 +1439,7 @@ git: /usr/bin/git /usr/local/bin/git /usr/share/man/man1/git.1.gz
 # /usr/local/bin/git --version
 git version 2.19.0
 # rm -f /usr/src/git-2.19.0/git-2.19.0.tar.gz
-# yum remove git
+# yum remove git -y
 # yum autoremove -y
 # exit
 $ git version
